@@ -1,0 +1,312 @@
+// Schéma conceptuel de la base de données — Plateforme de gestion du renseignement
+// Base : PostgreSQL — ORM : Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── Énumérations ───────────────────────────────
+
+enum Role {
+  ADMIN
+  RESPONSABLE
+  ANALYSTE
+  DECIDEUR
+  OPERATEUR
+}
+
+enum StatutUtilisateur {
+  ACTIF
+  SUSPENDU
+}
+
+enum TypeSource {
+  OSINT
+  HUMINT
+  SIGINT
+  IMINT
+  AUTRE
+}
+
+/// Cotation de la fiabilité de la source (grille OTAN / Amirauté : A à F)
+enum FiabiliteSource {
+  A
+  B
+  C
+  D
+  E
+  F
+}
+
+enum TypeInfo {
+  TEXTE
+  DOCUMENT
+  IMAGE
+  VIDEO
+  AUDIO
+  AUTRE
+}
+
+enum StatutInfo {
+  BRUT
+  VALIDE
+  ARCHIVE
+}
+
+enum TypeEntite {
+  PERSONNE
+  ORGANISATION
+  LIEU
+  VEHICULE
+  AUTRE
+}
+
+enum Impact {
+  FAIBLE
+  MOYEN
+  ELEVE
+  CRITIQUE
+}
+
+// ─────────────────────────────── Tables ───────────────────────────────
+
+model Utilisateur {
+  id                 Int               @id @default(autoincrement()) @map("id_user")
+  nom                String            @db.VarChar(100)
+  prenom             String?           @db.VarChar(100)
+  grade              String?           @db.VarChar(100)
+  role               Role              @default(ANALYSTE)
+  service            String?           @db.VarChar(150)
+  /// 1 = Non protégé, 2 = Diffusion restreinte, 3 = Confidentiel, 4 = Secret
+  niveauHabilitation Int               @default(1) @map("niveau_habilitation")
+  email              String            @unique @db.VarChar(200)
+  motDePasseHash     String            @map("mot_de_passe_hash")
+  statut             StatutUtilisateur @default(ACTIF)
+  dateCreation       DateTime          @default(now()) @map("date_creation")
+  derniereConnexion  DateTime?         @map("derniere_connexion")
+
+  collectes Collecte[]
+  actions   HistoriqueAction[]
+
+  @@map("utilisateur")
+}
+
+model Source {
+  id              Int             @id @default(autoincrement()) @map("id_source")
+  typeSource      TypeSource      @map("type_source")
+  nomSource       String          @map("nom_source") @db.VarChar(200)
+  description     String?
+  fiabiliteSource FiabiliteSource @default(F) @map("fiabilite_source")
+  lienContact     String?         @map("lien_contact")
+  dateCreation    DateTime        @default(now()) @map("date_creation")
+
+  collectes Collecte[]
+
+  @@index([typeSource])
+  @@map("source")
+}
+
+model Collecte {
+  id            Int      @id @default(autoincrement()) @map("id_collecte")
+  sourceId      Int      @map("id_source")
+  methode       String   @db.VarChar(100)
+  dateCollecte  DateTime @default(now()) @map("date_collecte")
+  collecteParId Int?     @map("collecte_par")
+  commentaire   String?
+
+  source       Source        @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  collectePar  Utilisateur?  @relation(fields: [collecteParId], references: [id], onDelete: SetNull)
+  informations Information[]
+
+  @@index([sourceId])
+  @@map("collecte")
+}
+
+model Information {
+  id                   Int        @id @default(autoincrement()) @map("id_info")
+  titre                String     @db.VarChar(255)
+  contenuTexte         String?    @map("contenu_texte")
+  typeInfo             TypeInfo   @default(TEXTE) @map("type_info")
+  dateEvenement        DateTime?  @map("date_evenement")
+  dateEnregistrement   DateTime   @default(now()) @map("date_enregistrement")
+  collecteId           Int?       @map("id_collecte")
+  /// Crédibilité de l'information (grille OTAN : 1 = confirmée … 6 = non évaluable)
+  fiabiliteContenu     Int        @default(6) @map("fiabilite_contenu")
+  /// 1 = Non protégé, 2 = Diffusion restreinte, 3 = Confidentiel, 4 = Secret
+  niveauClassification Int        @default(1) @map("niveau_classification")
+  statut               StatutInfo @default(BRUT)
+
+  collecte   Collecte?    @relation(fields: [collecteId], references: [id], onDelete: SetNull)
+  documents  Document[]
+  evenements Evenement[]
+  tags       InfoTag[]
+  entites    InfoEntite[]
+
+  @@index([statut])
+  @@index([niveauClassification])
+  @@index([collecteId])
+  @@map("information")
+}
+
+model Entite {
+  id              Int        @id @default(autoincrement()) @map("id_entite")
+  typeEntite      TypeEntite @map("type_entite")
+  nom             String     @db.VarChar(200)
+  alias           String?    @db.VarChar(200)
+  description     String?
+  dateNaissance   DateTime?  @map("date_naissance") @db.Date
+  nationalite     String?    @db.VarChar(100)
+  autresAttributs Json?      @map("autres_attributs")
+  localisationId  Int?       @map("id_localisation")
+  dateCreation    DateTime   @default(now()) @map("date_creation")
+
+  localisation   Localisation?      @relation(fields: [localisationId], references: [id], onDelete: SetNull)
+  informations   InfoEntite[]
+  liensSortants  LienEntreEntites[] @relation("LienSource")
+  liensEntrants  LienEntreEntites[] @relation("LienCible")
+  evenements     EvenementEntite[]
+
+  @@index([typeEntite])
+  @@index([nom])
+  @@map("entite")
+}
+
+/// Association N–N entre INFORMATION et ENTITE (absente du schéma initial)
+model InfoEntite {
+  infoId   Int     @map("id_info")
+  entiteId Int     @map("id_entite")
+  role     String? @db.VarChar(100)
+
+  information Information @relation(fields: [infoId], references: [id], onDelete: Cascade)
+  entite      Entite      @relation(fields: [entiteId], references: [id], onDelete: Cascade)
+
+  @@id([infoId, entiteId])
+  @@map("info_entite")
+}
+
+model LienEntreEntites {
+  id             Int       @id @default(autoincrement()) @map("id_lien")
+  entiteSourceId Int       @map("id_entite_source")
+  entiteCibleId  Int       @map("id_entite_cible")
+  typeLien       String    @map("type_lien") @db.VarChar(100)
+  debutRelation  DateTime? @map("debut_relation") @db.Date
+  finRelation    DateTime? @map("fin_relation") @db.Date
+  contexte       String?
+  /// Crédibilité du lien (1 = confirmé … 6 = non évaluable)
+  fiabilite      Int       @default(6)
+
+  entiteSource Entite @relation("LienSource", fields: [entiteSourceId], references: [id], onDelete: Cascade)
+  entiteCible  Entite @relation("LienCible", fields: [entiteCibleId], references: [id], onDelete: Cascade)
+
+  @@index([entiteSourceId])
+  @@index([entiteCibleId])
+  @@map("lien_entre_entites")
+}
+
+model Localisation {
+  id          Int     @id @default(autoincrement()) @map("id_localisation")
+  nomLieu     String  @map("nom_lieu") @db.VarChar(200)
+  typeLieu    String? @map("type_lieu") @db.VarChar(100)
+  pays        String? @db.VarChar(100)
+  latitude    Float?
+  longitude   Float?
+  description String?
+
+  evenements Evenement[]
+  entites    Entite[]
+
+  @@map("localisation")
+}
+
+model Evenement {
+  id             Int       @id @default(autoincrement()) @map("id_evenement")
+  titre          String    @db.VarChar(255)
+  dateDebut      DateTime  @map("date_debut")
+  dateFin        DateTime? @map("date_fin")
+  description    String?
+  localisationId Int?      @map("id_localisation")
+  typeEvenement  String?   @map("type_evenement") @db.VarChar(100)
+  impact         Impact?
+  infoId         Int?      @map("id_info")
+
+  localisation Localisation?     @relation(fields: [localisationId], references: [id], onDelete: SetNull)
+  information  Information?      @relation(fields: [infoId], references: [id], onDelete: SetNull)
+  entites      EvenementEntite[]
+
+  @@index([dateDebut])
+  @@map("evenement")
+}
+
+/// Entités impliquées dans un événement
+model EvenementEntite {
+  evenementId Int @map("id_evenement")
+  entiteId    Int @map("id_entite")
+
+  evenement Evenement @relation(fields: [evenementId], references: [id], onDelete: Cascade)
+  entite    Entite    @relation(fields: [entiteId], references: [id], onDelete: Cascade)
+
+  @@id([evenementId, entiteId])
+  @@map("evenement_entite")
+}
+
+model Document {
+  id            Int      @id @default(autoincrement()) @map("id_document")
+  infoId        Int      @map("id_info")
+  cheminFichier String   @map("chemin_fichier")
+  nomOriginal   String   @map("nom_original") @db.VarChar(255)
+  typeFichier   String   @map("type_fichier") @db.VarChar(150)
+  taille        Int
+  /// Empreinte SHA-256 du fichier (intégrité)
+  hash          String   @db.VarChar(64)
+  description   String?
+  dateAjout     DateTime @default(now()) @map("date_ajout")
+
+  information Information @relation(fields: [infoId], references: [id], onDelete: Cascade)
+
+  @@index([infoId])
+  @@map("document")
+}
+
+model Tag {
+  id        Int     @id @default(autoincrement()) @map("id_tag")
+  nomTag    String  @unique @map("nom_tag") @db.VarChar(100)
+  categorie String? @db.VarChar(100)
+
+  infos InfoTag[]
+
+  @@map("tag")
+}
+
+model InfoTag {
+  infoId Int @map("id_info")
+  tagId  Int @map("id_tag")
+
+  information Information @relation(fields: [infoId], references: [id], onDelete: Cascade)
+  tag         Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([infoId, tagId])
+  @@map("info_tag")
+}
+
+model HistoriqueAction {
+  id               Int      @id @default(autoincrement()) @map("id_action")
+  userId           Int?     @map("id_user")
+  /// CONNEXION, CONSULTATION, CREATION, MODIFICATION, SUPPRESSION, EXPORT, TELECHARGEMENT
+  action           String   @db.VarChar(50)
+  tableConcernee   String?  @map("table_concernee") @db.VarChar(100)
+  idEnregistrement Int?     @map("id_enregistrement")
+  dateAction       DateTime @default(now()) @map("date_action")
+  details          String?
+  adresseIp        String?  @map("adresse_ip") @db.VarChar(64)
+
+  utilisateur Utilisateur? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([dateAction])
+  @@map("historique_action")
+}

@@ -1,0 +1,32 @@
+# Dépendances
+node_modules/
+
+# Configuration locale (contient les mots de passe) — voir backend/.env.example
+.env
+.env.*
+!.env.example
+
+# PostgreSQL portable (embedded-postgres) : données locales et démo
+backend/.pgdata/
+.demo/
+
+# Build
+frontend/dist/
+
+# Fichiers déposés par les utilisateurs
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Journaux et fichiers système
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Claude Code (réglages locaux)
+.claude/settings.local.json

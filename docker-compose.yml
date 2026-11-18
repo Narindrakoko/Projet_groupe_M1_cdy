@@ -1,0 +1,20 @@
+# Facultatif : PostgreSQL dans Docker, pour les membres qui ne l'ont pas installé.
+#   docker compose up -d
+# puis « npm run setup » avec : hôte localhost, port 5432, utilisateur postgres, mot de passe postgres.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: sentinelle-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: projet_bd
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

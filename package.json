@@ -1,0 +1,23 @@
+{
+  "name": "sentinelle",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plateforme web de gestion du renseignement (collecte, analyse, exploitation) — PostgreSQL, Prisma, Express, React",
+  "engines": {
+    "node": ">=18.18"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "demo": "node scripts/demo.mjs",
+    "dev": "node scripts/dev.mjs",
+    "start": "node scripts/dev.mjs --prod",
+    "build": "npm run build --prefix frontend",
+    "db:local": "node scripts/db-local.mjs up",
+    "db:local:reset": "node scripts/db-local.mjs reset",
+    "db:migrate": "node scripts/with-db.mjs npm run db:migrate --prefix backend",
+    "db:deploy": "node scripts/with-db.mjs npm run db:deploy --prefix backend",
+    "db:seed": "node scripts/with-db.mjs npm run db:seed --prefix backend",
+    "db:reset": "node scripts/with-db.mjs npm run db:reset --prefix backend",
+    "db:studio": "node scripts/with-db.mjs npm run db:studio --prefix backend"
+  }
+}
